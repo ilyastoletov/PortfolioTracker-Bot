@@ -1,16 +1,14 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters.command import Command
-from aiogram.filters.state import StateFilter
 from keyboard.account import available_networks_keyboard
 from message import messages
 from aiogram.fsm.context import FSMContext
 from network.client import NetworkClient
-from state.session import SessionState
+from util.number import is_float
 from state.account import AccountState
 
 router = Router()
-router.message.filter(StateFilter(SessionState.authorized))
 
 @router.callback_query(F.data == "create_account")
 async def create_account_query(call: CallbackQuery, client: NetworkClient):
@@ -27,20 +25,21 @@ async def create_account_first_step(msg: Message, client: NetworkClient, state: 
     )
     await state.set_state(AccountState.network_name)
 
+
 @router.callback_query(AccountState.network_name)
 async def transfer_to_second_step(call: CallbackQuery, client: NetworkClient, state: FSMContext):
     address_tracking_networks = await client.get_address_tracking_networks()
     chosen_network = call.data
-    await state.update_data(network_name=chosen_network)
+    await state.update_data(network=chosen_network)
 
     if chosen_network in address_tracking_networks:
-        text = messages.account_optional_second_step
+        text = messages.account_step_address
         await state.set_state(AccountState.address)
     else:
-        text = messages.account_second_step
+        text = messages.account_step_initial_balance
         await state.set_state(AccountState.initial_balance)
 
-    await call.message.edit_text(text)
+    await call.message.edit_text(text, parse_mode="HTML")
 
 
 @router.message(AccountState.address)
@@ -55,7 +54,7 @@ async def handle_address(msg: Message, client: NetworkClient, state: FSMContext)
     if error is not None:
         await msg.answer(f"Error: {error}")
     else:
-        await show_account_created_message(msg, network, client)
+        await msg.answer(messages.account_create_success)
 
 
 @router.message(AccountState.initial_balance)
@@ -73,14 +72,22 @@ async def handle_initial_balance(msg: Message, client: NetworkClient, state: FSM
     if error is not None:
         await msg.answer(f"Error: {error}")
     else:
-        await show_account_created_message(msg, network, client)
+        await msg.answer(messages.account_create_success)
 
-async def show_account_created_message(msg: Message, network_name: str, client: NetworkClient):
-    pass
+@router.message(Command("accounts"))
+async def list_all_accounts(msg: Message, client: NetworkClient):
+    accounts_list = await client.get_all_accounts()
+    if isinstance(accounts_list, str):
+        await msg.answer("Error: " + accounts_list)
 
-def is_float(v) -> bool:
-    try:
-        float(v)
-        return True
-    except Exception:
-        return False
+    list_message = ""
+    for account in accounts_list:
+        list_message += f"\nAccount network: <b>{account.network_name}</b>\n"
+        if account.address is not None:
+            list_message += f"Address: <b>{account.address}</b>\n"
+        else:
+            list_message += f"Balance: <b>{account.balance}</b>\n"
+
+    await msg.answer(messages.account_list_title + list_message, parse_mode="HTML")
+
+# TODO Provide control menu for account
