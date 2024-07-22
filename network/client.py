@@ -4,8 +4,10 @@ import json
 import network.endpoint as endpoint
 from typing import Optional, Union
 
+
 class NetworkError(Exception):
     pass
+
 
 class NetworkClient:
 
@@ -53,6 +55,31 @@ class NetworkClient:
             async with session.get(self.base_url + endpoint.account_all) as response:
                 resp: Union[list[dict], dict] = json.loads(await response.text())
                 return resp if not resp.__contains__('error') else resp['error']
+
+    async def get_single_account(self, network_name: str) -> Union[dict, str]:
+        async with aiohttp.ClientSession() as session:
+            url = self.base_url + endpoint.account_by_name + network_name
+            async with session.get(url) as res:
+                response_text = json.loads(await res.text())
+                return response_text if not response_text.__contains__('error') else response_text['error']
+
+    async def change_address(self, account: str, new_address: str) -> Optional[str]:
+        async with aiohttp.ClientSession() as session:
+            url = self.base_url + endpoint.edit_address
+            request_body = {
+                'account': account,
+                'newAddress': new_address
+            }
+            async with session.patch(url=url, json=request_body) as response:
+                text = json.loads(await response.text())
+                print(response.status)
+                return text['error'] if response.status != 200 else None
+
+    async def delete_account(self, account: str) -> bool:
+        async with aiohttp.ClientSession() as session:
+            async with session.delete(url=self.base_url + endpoint.delete_account + account) as res:
+                return res.status == 200
+
 
 
 

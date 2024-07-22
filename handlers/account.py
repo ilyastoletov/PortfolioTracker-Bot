@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters.command import Command
-from keyboard.account import available_networks_keyboard
+import keyboard.account as kb
 from message import messages
 from aiogram.fsm.context import FSMContext
 from network.client import NetworkClient
@@ -20,7 +20,7 @@ async def create_account_first_step(msg: Message, client: NetworkClient, state: 
     networks = await client.get_available_networks()
     await msg.answer(
         text=messages.account_first_step,
-        reply_markup=available_networks_keyboard(networks),
+        reply_markup=kb.available_networks_keyboard(networks),
         parse_mode="HTML"
     )
     await state.set_state(AccountState.network_name)
@@ -56,6 +56,8 @@ async def handle_address(msg: Message, client: NetworkClient, state: FSMContext)
     else:
         await msg.answer(messages.account_create_success)
 
+    await state.clear()
+
 
 @router.message(AccountState.initial_balance)
 async def handle_initial_balance(msg: Message, client: NetworkClient, state: FSMContext):
@@ -74,20 +76,133 @@ async def handle_initial_balance(msg: Message, client: NetworkClient, state: FSM
     else:
         await msg.answer(messages.account_create_success)
 
+    await state.clear()
+
 @router.message(Command("accounts"))
 async def list_all_accounts(msg: Message, client: NetworkClient):
     accounts_list = await client.get_all_accounts()
     if isinstance(accounts_list, str):
         await msg.answer("Error: " + accounts_list)
+        return
 
     list_message = ""
     for account in accounts_list:
-        list_message += f"\nAccount network: <b>{account.network_name}</b>\n"
-        if account.address is not None:
-            list_message += f"Address: <b>{account.address}</b>\n"
+        list_message += f"\nNetwork: <b>{account['network_name']}</b>\n"
+        if account['address'] is not None:
+            list_message += f"Address: <b>{account['address']}</b>\n"
         else:
-            list_message += f"Balance: <b>{account.balance}</b>\n"
+            list_message += f"Balance: <b>{account['balance']}</b>\n"
 
-    await msg.answer(messages.account_list_title + list_message, parse_mode="HTML")
+    await msg.answer(
+        text=messages.account_list_title + list_message,
+        reply_markup=kb.control_accounts_button(),
+        parse_mode="HTML"
+    )
 
-# TODO Provide control menu for account
+
+@router.callback_query(F.data == "control_accounts_menu")
+async def accounts_control_menu(call: CallbackQuery, client: NetworkClient, state: FSMContext):
+    accounts_list = await client.get_all_accounts()
+    if isinstance(accounts_list, str):
+        await call.message.answer("Error: " + accounts_list)
+        return
+
+    networks = [acc['network_name'] for acc in accounts_list]
+    await call.message.edit_text(
+        text=messages.select_account_to_control,
+        reply_markup=kb.control_account_menu(networks)
+    )
+
+    await state.set_state(AccountState.control_account_scope)
+
+
+@router.callback_query(AccountState.control_account_scope)
+async def single_account_control_menu(call: CallbackQuery, client: NetworkClient, state: FSMContext):
+    if call.data == 'back':
+        await list_all_accounts(call.message, client)
+        await state.clear()
+        return
+    network = call.data
+    account = await client.get_single_account(network)
+
+    text = ""
+    text += f"Network: {account['network_name']}\n"
+    has_address = account['address'] is not None
+
+    if has_address:
+        text += f"Address: {account['address']}"
+    else:
+        text += f"Balance: {account['balance']}"
+
+    await call.message.edit_text(
+        text=text,
+        reply_markup=kb.control_account(has_address)
+    )
+
+    await state.set_state(AccountState.account_choose_action_scope)
+    await state.update_data(name=account['network_name'])
+
+
+@router.callback_query(AccountState.account_choose_action_scope)
+async def handle_account_action(call: CallbackQuery, state: FSMContext, client: NetworkClient):
+    action = call.data
+    if action == 'back':
+        await accounts_control_menu(call, client, state)
+        return
+    elif action == 'change_address':
+        await state.set_state(AccountState.change_address)
+        await call.message.answer(
+            text=messages.account_new_address,
+            reply_markup=kb.address_cancel()
+        )
+    else:
+        await call.message.answer(
+            text=messages.account_delete_confirm,
+            reply_markup=kb.confirm_delete()
+        )
+        await state.set_state(AccountState.del_scope)
+
+
+@router.message(AccountState.change_address)
+async def handle_new_address(msg: Message, state: FSMContext, client: NetworkClient):
+    if msg.text == 'Cancel':
+        await msg.delete()
+        await msg.answer(messages.address_cancelled, reply_markup=kb.remove_reply())
+        await state.set_state(AccountState.account_choose_action_scope)
+        return
+
+    state_data = await state.get_data()
+    change_address_response = await client.change_address(
+        account=state_data['name'],
+        new_address=msg.text
+    )
+
+    if isinstance(change_address_response, str):
+        await msg.answer(f"Error: {change_address_response}")
+        return
+
+    await msg.answer(
+        text=messages.address_changed,
+        reply_markup=kb.remove_reply()
+    )
+    await state.clear()
+
+
+@router.callback_query(AccountState.del_scope)
+async def delete_account(call: CallbackQuery, state: FSMContext, client: NetworkClient):
+    decision = call.data
+    if decision == 'no':
+        await call.message.edit_text(messages.delete_cancelled)
+        await accounts_control_menu(call, client, state)
+        await state.clear()
+        return
+
+    state_data = await state.get_data()
+    delete_status = await client.delete_account(state_data['name'])
+
+    if delete_status:
+        await call.message.edit_text(messages.account_deleted)
+    else:
+        await call.message.answer(messages.error_while_deleting)
+
+    await state.clear()
