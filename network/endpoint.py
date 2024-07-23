@@ -10,3 +10,5 @@ edit_address = "/account/editAddress/"
 
 tx_add = "/transaction/add/"
 tx_list = "/transaction/byNetwork/"
+
+portfolio = "/portfolio/"

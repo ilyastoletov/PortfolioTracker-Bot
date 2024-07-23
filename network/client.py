@@ -98,6 +98,12 @@ class NetworkClient:
                 text = json.loads(await response.text())
                 return text if response.status == 200 else None
 
+    async def get_portfolio(self) -> Optional[dict]:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.base_url + endpoint.portfolio) as response:
+                text = json.loads(await response.text())
+                return text if response.status == 200 else None
+
 
 
 

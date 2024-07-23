@@ -197,9 +197,8 @@ async def handle_new_address(msg: Message, state: FSMContext, client: NetworkCli
 async def delete_account(call: CallbackQuery, state: FSMContext, client: NetworkClient):
     decision = call.data
     if decision == 'no':
-        await call.message.edit_text(messages.delete_cancelled)
-        await accounts_control_menu(call, client, state)
-        await state.clear()
+        await call.message.edit_text(messages.action_cancelled)
+        await state.set_state(AccountState.account_choose_action_scope)
         return
 
     state_data = await state.get_data()

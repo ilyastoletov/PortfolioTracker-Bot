@@ -19,7 +19,6 @@ action_cancelled = "Action is cancelled"
 account_delete_confirm = "Are you sure you want to delete account?\nYou will lose all of transactions attached to it"
 address_changed = "Address successfully changed"
 account_deleted = "Account has been deleted"
-delete_cancelled = "Action cancelled, turning back to menu..."
 error_while_deleting = "There was an error when trying to delete account"
 
 # Transaction
@@ -28,3 +27,6 @@ tx_enter_amount = "Now enter amount of transaction in "
 zero_amount_error = "Amount of transaction must be greater than 0"
 tx_list_choose_account = "Choose account to see list of transactions"
 tx_list_fetch_error = "There was error fetching transactions list for that network"
+
+# Portfolio
+portfolio_error = "Request limit exceed.\nPlease try again later"

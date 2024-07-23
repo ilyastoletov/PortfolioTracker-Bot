@@ -9,6 +9,7 @@ import logging
 from handlers.start import router as session
 from handlers.account import router as account
 from handlers.transaction import router as transaction
+from handlers.portfolio import router as portfolio
 from handlers.error import router as error
 
 
@@ -57,7 +58,9 @@ async def main():
 
     network_client = NetworkClient()
 
-    dp.include_routers(session, account, transaction, error)
+    dp.include_routers(
+        session, account, transaction, portfolio, error
+    )
     dp['client'] = network_client
 
     try:
