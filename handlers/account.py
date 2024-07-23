@@ -4,11 +4,14 @@ from aiogram.filters.command import Command
 import keyboard.account as kb
 from message import messages
 from aiogram.fsm.context import FSMContext
+from aiogram.filters.state import StateFilter
 from network.client import NetworkClient
+from handlers.transaction import tx_by_account
 from util.number import is_float
 from state.account import AccountState
 
 router = Router()
+
 
 @router.callback_query(F.data == "create_account")
 async def create_account_query(call: CallbackQuery, client: NetworkClient):
@@ -78,7 +81,8 @@ async def handle_initial_balance(msg: Message, client: NetworkClient, state: FSM
 
     await state.clear()
 
-@router.message(Command("accounts"))
+
+@router.message(StateFilter(None), Command("accounts"))
 async def list_all_accounts(msg: Message, client: NetworkClient):
     accounts_list = await client.get_all_accounts()
     if isinstance(accounts_list, str):
@@ -110,7 +114,7 @@ async def accounts_control_menu(call: CallbackQuery, client: NetworkClient, stat
     networks = [acc['network_name'] for acc in accounts_list]
     await call.message.edit_text(
         text=messages.select_account_to_control,
-        reply_markup=kb.control_account_menu(networks)
+        reply_markup=kb.networks_list(networks)
     )
 
     await state.set_state(AccountState.control_account_scope)
@@ -126,7 +130,7 @@ async def single_account_control_menu(call: CallbackQuery, client: NetworkClient
     account = await client.get_single_account(network)
 
     text = ""
-    text += f"Network: {account['network_name']}\n"
+    text += f"Network: {network}\n"
     has_address = account['address'] is not None
 
     if has_address:
@@ -136,11 +140,11 @@ async def single_account_control_menu(call: CallbackQuery, client: NetworkClient
 
     await call.message.edit_text(
         text=text,
-        reply_markup=kb.control_account(has_address)
+        reply_markup=kb.control_account_menu(has_address, network)
     )
 
     await state.set_state(AccountState.account_choose_action_scope)
-    await state.update_data(name=account['network_name'])
+    await state.update_data(name=network)
 
 
 @router.callback_query(AccountState.account_choose_action_scope)
@@ -153,8 +157,10 @@ async def handle_account_action(call: CallbackQuery, state: FSMContext, client: 
         await state.set_state(AccountState.change_address)
         await call.message.answer(
             text=messages.account_new_address,
-            reply_markup=kb.address_cancel()
+            reply_markup=kb.cancel_kb()
         )
+    elif action.startswith('tx_list'):
+        await tx_by_account(call, client, state)
     else:
         await call.message.answer(
             text=messages.account_delete_confirm,
@@ -166,8 +172,7 @@ async def handle_account_action(call: CallbackQuery, state: FSMContext, client: 
 @router.message(AccountState.change_address)
 async def handle_new_address(msg: Message, state: FSMContext, client: NetworkClient):
     if msg.text == 'Cancel':
-        await msg.delete()
-        await msg.answer(messages.address_cancelled, reply_markup=kb.remove_reply())
+        await msg.answer(messages.action_cancelled, reply_markup=kb.remove_reply())
         await state.set_state(AccountState.account_choose_action_scope)
         return
 

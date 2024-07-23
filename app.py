@@ -6,15 +6,25 @@ import asyncio
 from network.client import NetworkClient
 import logging
 
-from handlers.start import router as session_router
-from handlers.account import router as account_router
-from handlers.error import router as error_router
+from handlers.start import router as session
+from handlers.account import router as account
+from handlers.transaction import router as transaction
+from handlers.error import router as error
+
+
+# TODO Display balance for address-tracking account in accounts control menu
+# TODO Fetch and show transactions for address-tracking accounts
+# TODO Ability to delete transactions for not address-tracking accounts
 
 async def set_bot_commands(bot: Bot):
     commands_list = [
         BotCommand(
             command="start",
             description="Start the bot"
+        ),
+        BotCommand(
+            command="cancel",
+            description="Cancel current action"
         ),
         BotCommand(
             command="portfolio",
@@ -47,7 +57,7 @@ async def main():
 
     network_client = NetworkClient()
 
-    dp.include_routers(session_router, account_router, error_router)
+    dp.include_routers(session, account, transaction, error)
     dp['client'] = network_client
 
     try:

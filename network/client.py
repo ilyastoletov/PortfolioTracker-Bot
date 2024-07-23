@@ -72,7 +72,6 @@ class NetworkClient:
             }
             async with session.patch(url=url, json=request_body) as response:
                 text = json.loads(await response.text())
-                print(response.status)
                 return text['error'] if response.status != 200 else None
 
     async def delete_account(self, account: str) -> bool:
@@ -80,6 +79,24 @@ class NetworkClient:
             async with session.delete(url=self.base_url + endpoint.delete_account + account) as res:
                 return res.status == 200
 
+    async def new_transaction(self, amount: float, account: str, increase: bool) -> Optional[str]:
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                'account': account,
+                'amount': amount,
+                'increase': increase
+            }
+            payload_ser = json.dumps(payload)
+            header = {'Content-Type': 'application/json'}
+            async with session.post(url=self.base_url + endpoint.tx_add, data=payload_ser, headers=header) as response:
+                text = json.loads(await response.text())
+                return text['error'] if response.status != 201 else None
+
+    async def get_transactions(self, account: str) -> Optional[list]:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.base_url + endpoint.tx_list + account) as response:
+                text = json.loads(await response.text())
+                return text if response.status == 200 else None
 
 
 
